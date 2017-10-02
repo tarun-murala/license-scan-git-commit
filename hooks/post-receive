@@ -2,7 +2,10 @@
 
 import subprocess
 from collections import OrderedDict
+import re
 
+EMAIL_RE = re.compile("^\"?(.*)\"? <(.*)>$")
+DIFF_TREE_RE = re.compile("^:(?P<src_mode>[0-9]{6}) (?P<dst_mode>[0-9]{6}) (?P<src_hash>[0-9a-f]{7,40}) (?P<dst_hash>[0-9a-f]{7,40}) (?P<status>[ADMTUX]|[CR][0-9]{1,3})\s+(?P<file1>\S+)(?:\s+(?P<file2>\S+))?$", re.MULTILINE)
 
 def run_git(args):
     args = ['git'] + args
@@ -32,8 +35,11 @@ def get_revisions(old, new, head_commit=False):
     else:
         commit_range = '%s..%s' % (old, new)
 
-    revs = git(['rev-list', '--pretty=medium', '--reverse', commit_range])
+    print "commit_range ->  " + commit_range
+    revs = run_git(['rev-list', '--pretty=medium', '--reverse', commit_range])
+    print revs
     sections = revs.split('\n\n')
+    print sections
 
     revisions = []
     s = 0
@@ -100,148 +106,10 @@ def get_revisions(old, new, head_commit=False):
 
     return revisions
 
-# def get_base_ref(commit, ref):
-#     branches = git(['branch', '--contains', commit]).split('\n')
-#     CURR_BRANCH_RE = re.compile('^\* \w+$')
-#     curr_branch = None
+for line in sys.stdin:
+        print "line -> " + line
+        old, new, ref = line.strip().split(' ')
+        print "old -> " + old + "| new -> " + new + " | ref -> " + ref
+        revisions = get_revisions(old, new, ref)
+        print revisions
 
-#     if len(branches) > 1:
-#         on_master = False
-#         for branch in branches:
-#             if CURR_BRANCH_RE.match(branch):
-#                 curr_branch = branch.strip('* \n')
-#             elif branch.strip() == 'master':
-#                 on_master = True
-
-#         if curr_branch is None and on_master:
-#             curr_branch = 'master'
-
-#     if curr_branch is None:
-#         curr_branch = branches[0].strip('* \n')
-
-#     base_ref = 'refs/heads/%s' % curr_branch
-
-#     if base_ref == ref:
-#         return None
-#     else:
-#         return base_ref
-
-# # http://stackoverflow.com/a/20559031
-# def purify(o):
-#     if hasattr(o, 'items'):
-#         oo = type(o)()
-#         for k in o:
-#             if k != None and o[k] != None:
-#                 oo[k] = purify(o[k])
-#     elif hasattr(o, '__iter__'):
-#         oo = []
-#         for it in o:
-#             if it != None:
-#                 oo.append(purify(it))
-#     else: return o
-#     return type(o)(oo)
-
-# def make_json(old, new, ref):
-#     # Lots more fields could be added
-#     # https://developer.github.com/v3/activity/events/types/#pushevent
-#     compareurl = None
-#     if COMPARE_URL is not None: compareurl = COMPARE_URL % (old, new)
-
-#     data = {
-#         'before': old,
-#         'after': new,
-#         'ref': ref,
-#         'compare': compareurl,
-#         'repository': {
-#             'url': REPO_URL,
-#             'name': REPO_NAME,
-#             'description': REPO_DESC,
-#             'owner': {
-#                 'name': REPO_OWNER_NAME,
-#                 'email': REPO_OWNER_EMAIL
-#                 }
-#             }
-#         }
-
-#     revisions = get_revisions(old, new)
-#     commits = []
-#     for r in revisions:
-#         url = None
-#         if COMMIT_URL is not None:
-#             url = COMMIT_URL % r['id']
-#         commits.append({'id': r['id'],
-#                         'author': {'name': r['name'], 'email': r['email']},
-#                         'url': url,
-#                         'message': r['message'],
-#                         'timestamp': r['date'],
-#                         'added': r['added'],
-#                         'removed': r['removed'],
-#                         'modified': r['modified']
-#                         })
-#     data['commits'] = commits
-#     data['size'] = len(commits)
-#     data['head_commit'] = get_revisions(old, new, True)
-
-#     base_ref = get_base_ref(new, ref)
-#     if base_ref:
-#         data['base_ref'] = base_ref
-
-#     return json.dumps(data)
-
-# def post(url, data):
-#     headers = {
-#         'Content-Type': POST_CONTENTTYPE,
-#         'X-GitHub-Event': 'push',
-#     }
-#     if POST_CONTENTTYPE == 'application/json':
-#         postdata = data
-#     elif POST_CONTENTTYPE == 'application/x-www-form-urlencoded':
-#         postdata = urllib.parse.urlencode({'payload': data}).encode('UTF-8')
-#     if POST_SECRET_TOKEN is not None:
-#         import hmac
-#         import hashlib
-#         hmacobj = hmac.new(POST_SECRET_TOKEN, postdata, hashlib.sha1)
-#         signature = 'sha1=' + hmacobj.hexdigest()
-#         headers['X-Hub-Signature'] = signature
-
-#     request = urllib.request.Request(url, postdata, headers)
-
-#     # Default handler
-#     handler = urllib.request.HTTPHandler
-#     # Override handler for passwords
-#     if POST_USER is not None or POST_PASS is not None:
-#         password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
-#         password_mgr.add_password(POST_REALM, url, POST_USER, POST_PASS)
-#         handlerfunc = urllib.request.HTTPBasicAuthHandler
-#         if POST_REALM is not None:
-#             handlerfunc = urllib.request.HTTPDigestAuthHandler
-#         handler = handlerfunc(password_mgr)
-
-#     opener = urllib.request.build_opener(handler)
-
-#     try:
-#         if POST_TIMEOUT is not None:
-#             u = opener.open(request, None, float(POST_TIMEOUT))
-#         else:
-#             u = opener.open(request)
-#         u.read()
-#         u.close()
-#     except urllib.error.HTTPError as error:
-#         errmsg = "POST to %s returned error code %s." % (url, str(error.code))
-#         print(errmsg, file=sys.stderr)
-
-# if __name__ == '__main__':
-#     for line in sys.stdin:
-#         old, new, ref = line.strip().split(' ')
-#         data = make_json(old, new, ref)
-#         if POST_URL or POST_URLS:
-#             if POST_URL:
-#                 post(POST_URL, data)
-#             if POST_URLS:
-#                 urls = io.StringIO(POST_URLS)
-#                 rows = csv.reader(urls)
-#                 for row in rows:
-#                     for url in row:
-#                         post(url.strip(), data)
-#         else:
-#             print(data)
