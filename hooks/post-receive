@@ -50,16 +50,19 @@ def check_print_license_constraints(json_file, file_name):
     with open(json_file) as json_file_temp:    
         json_data = json.load(json_file_temp)
         files = json_data["files"]
-        licenses = files[0]["licenses"]
-        if len(licenses) > 0:
-            print file_name + " -> HAS License Constraints"
-        else:
-            print file_name + " -> has NO License Constraints"
+        if files and len(files) > 0:
+            licenses = files[0]["licenses"]
+            if licenses: 
+                if len(licenses) > 0:
+                    print file_name + " -> HAS License Constraints"
+                    return;
+    print file_name + " -> has NO License Constraints"
 
 
 def check_for_licenses_new_file(commit_sha, file_name):
     print "Scanning NEW File -> " + file_name
     branch_name = get_branch_name(commit_sha, file_name)
+    #  # TODO: Check if the new file is zip extract the same
     output_file_path = generate_ref_file(branch_name, file_name)
     output_file_json = get_json_name(output_file_path)
     run_scancode(['--license', output_file_path, output_file_json])
@@ -155,5 +158,5 @@ def scan_revisions(old, new, head_commit=False):
 #         print revisions
 
 # # TEST Code
-revisions = scan_revisions('f4b9285b5d25f936f00fe7aa00388d79bdbdd8c6', '54bcd0c1903d2322e1674cd052b06288761d0b66')
+revisions = scan_revisions('54bcd0c1903d2322e1674cd052b06288761d0b66', '438b78dc04573cc39f90674567e82a4a9a8b00e8')
 
