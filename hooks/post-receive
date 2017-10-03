@@ -65,7 +65,7 @@ def check_for_licenses_new_file(commit_sha, file_name):
     #  # TODO: Check if the new file is zip extract the same
     output_file_path = generate_ref_file(branch_name, file_name)
     output_file_json = get_json_name(output_file_path)
-    run_scancode(['--license', output_file_path, output_file_json])
+    run_scancode(['--license', '--copyright', '--package', output_file_path, output_file_json])
     check_print_license_constraints(output_file_json, file_name)
 
 def check_for_licenses_diff_from_file(commit_sha, file_name):
@@ -158,5 +158,5 @@ def scan_revisions(old, new, head_commit=False):
 #         print revisions
 
 # # TEST Code
-revisions = scan_revisions('54bcd0c1903d2322e1674cd052b06288761d0b66', '438b78dc04573cc39f90674567e82a4a9a8b00e8')
+revisions = scan_revisions('5dcea23c7c266bac54d090bfafa55536ee31d486', '32c2abecf10557e02bb20912be1838908087f498')
 
