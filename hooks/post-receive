@@ -74,7 +74,7 @@ def check_for_licenses_diff_from_file(commit_sha, file_name):
     #  # Get only the diff and check against the same
     output_file_path = generate_ref_file(branch_name, file_name)
     output_file_json = get_json_name(output_file_path)
-    run_scancode(['--license', output_file_path, output_file_json])
+    run_scancode(['--license', '--copyright', '--package', output_file_path, output_file_json])
     check_print_license_constraints(output_file_json, file_name)
 
 def git_config():
