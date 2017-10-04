@@ -31,7 +31,8 @@ from xml.etree import ElementTree
 
 DIFF_TREE_RE = re.compile("^:(?P<src_mode>[0-9]{6}) (?P<dst_mode>[0-9]{6}) (?P<src_hash>[0-9a-f]{7,40}) (?P<dst_hash>[0-9a-f]{7,40}) (?P<status>[ADMTUX]|[CR][0-9]{1,3})\s+(?P<file1>\S+)(?:\s+(?P<file2>\S+))?$", re.MULTILINE)
 SCANCODE = '../scancode-toolkit-2.0.1/scancode'
-OUTPUT_DIR = 'outputs'
+OUTPUT_DIR = '../outputs'
+namespaces = {'xmlns' : 'http://maven.apache.org/POM/4.0.0'}
 
 # Response data
 response_data = {}
@@ -208,7 +209,8 @@ def add_to_packaging_files(file_name):
 
 def add_to_license_errors(file_name, message):
     global response_data
-    response_data['license_errors'].append(file_name)
+    if not file_name in response_data['license_errors']:
+        response_data['license_errors'].append(file_name) 
 
 
 def is_packaging_model(file_name):
@@ -216,9 +218,7 @@ def is_packaging_model(file_name):
     if not file_name:
         return False
 
-    return is_pom(file_name) or is_npm(file_name) or 
-        is_rpm(file_name) or is_nuget(file_name) or 
-            is_php(file_name)
+    return is_pom(file_name) or is_npm(file_name) or is_rpm(file_name) or is_nuget(file_name) or is_php(file_name)
 
 def is_pom(file_name):
     return file_name.endswith(('.pom', 'pom.xml'))
@@ -253,7 +253,6 @@ def is_compressed(file_name):
 
 ## JS Files will go through the scanning for licenses and copyrights
 
-
 def handle_packaging_file(file_name, revision_type, output_file_path):
     add_to_packaging_files(file_name)
     if not revision_type:
@@ -271,17 +270,21 @@ def handle_pom_changes(file_name, revision_type, output_file_path):
     if revision_type == 'ADD':
         print "New POM has been added"
     
-    # Check for the dependencies
-    tree = ElementTree.parse(output_file_path)
-    root = tree.getroot()
+        # Check for the dependencies
+        tree = ElementTree.parse(output_file_path)
+        root = tree.getroot()
 
-    deps = root.findall(".//xmlns:dependency", namespaces=namespaces)
-    for d in deps:
-        artifactId = d.find("xmlns:artifactId", namespaces=namespaces)
-        version    = d.find("xmlns:version", namespaces=namespaces)
-        # TODO: Do we manually install the depdency and scan for the changes?
-        # Ideally maintain list for whitelist with version
-        print artifactId.text + '\t' + version.text
+        deps = root.findall(".//xmlns:dependency", namespaces=namespaces)
+        for d in deps:
+            groupId = d.find("xmlns:groupId", namespaces=namespaces)
+            artifactId = d.find("xmlns:artifactId", namespaces=namespaces)
+            version    = d.find("xmlns:version", namespaces=namespaces)
+            # TODO: Do we manually install the dependency and scan for the changes?
+            # print artifactId.text + '\t' + version.text
+            
+            # Ideally maintain list for whitelist with version
+            if not str(groupId).startswith(('com.glide', 'com.snc')):
+                add_to_license_errors(file_name, 'review_pom_file')
 
 def handle_npm_changes(file_name, revision_type, output_file_path):
     if revision_type == 'ADD':
@@ -291,15 +294,15 @@ def handle_npm_changes(file_name, revision_type, output_file_path):
         json_data = json.load(json_file_temp)
         dependencies = json_data["dependencies"]
         if dependencies and len(dependencies) > 0:
-            add_to_license_errors(file_name)
+            add_to_license_errors(file_name, 'review_package_json')
 
 def handle_other_changes(file_name, revision_type, output_file_path):
     print "Verify manually! Other packaging model(s) have been added/updated -> " + file_name
-    add_to_license_errors(file_name)
+    add_to_license_errors(file_name, 'review_other_packaging_file')
 
 def handle_compressed_file(file_name, revision_type):
     print "Compressed file has been added/updated -> " + file_name
-    add_to_license_errors(file_name)
+    add_to_license_errors(file_name, 'review_compressed_file')
 
 ## MAIN CODE
 # if __name__ == "__main__":
@@ -309,9 +312,11 @@ def handle_compressed_file(file_name, revision_type):
 #         revisions = scan_revisions(old, new, ref)
 #         print revisions
 
-## TEST Code
-scan_revisions('5dcea23c7c266bac54d090bfafa55536ee31d486', '32c2abecf10557e02bb20912be1838908087f498')
+## TEST Code - After seeding the test files
+## Run python hooks/post-receive
+scan_revisions('8180ed1f23dcc9fd00c37ca88e364adb5bed5d46', '9637fb93fc6dae16d5fd425280a21905140ae9b9')
+# if os.path.exists(OUTPUT_DIR):
+#     os.rmdir(OUTPUT_DIR)
 
 json_response = json.dumps(response_data)
-print response_data
 print json_response
