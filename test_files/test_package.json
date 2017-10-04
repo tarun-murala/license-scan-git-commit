@@ -1,0 +1,40 @@
+{
+  "name": "TarunMuralaMeanApp",
+  "version": "1.0.0",
+  "description": "Tarun Murala Mean Application",
+  "keywords": [
+    "Tarun",
+    "Tarun Murala",
+    "Node.js",
+    "Mean",
+    "Angular",
+    "Express"
+  ],
+  "author": {
+    "name": "Tarun Murala",
+    "email": "tarun.murala@gmail.com",
+    "url": "http://tarunmurala.com/"
+  },
+  "homepage": "http://tarunmurala.com/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kumartarun422/"
+  },
+
+  "engines": {
+    "node": ">= 0.6.0",
+    "npm": ">= 1.0.0"
+  },
+
+  "dependencies": {
+    "express": "~3.4.4",
+    "mongoose" : "~3.8.0",
+    "body-parser" : "~1.4.2",
+    "method-override" : "~2.0.2"
+  },
+  "devDependencies": {},
+  "bundleDependencies": [],
+
+  "private": true,
+  "main": "server.js"
+}
