@@ -1,14 +1,44 @@
 #!/usr/bin/env python
 
+## Post-Receive Hook
+##   - A symlink has to created from the .hooks (incase if .coreHooks are not configured)
+##   - Or use templates incase
+## Logic:
+##   1. Read the Git commit
+##   2. Read the Last commit
+##   3. For each file revisions in the part of commit
+##   4. Retrieve the branch name on which this commit was made
+##   5. Fetch the file from the branch and Save it under OUTPUTS/ folder
+##   6. If the file has ADDED
+##         i. If the file is packaging file - check and report for the licenses
+##         ii. If the file is compressed file - simply report
+##         iii. If the file neither of them - Scan for the licenses and copyrights
+##   7. If the file has MODIFIED
+##         i. If the file is packaging file - check and report for the licenses
+##         ii. If the file is compressed file - simply report
+##         iii. If the file neither of them - Scan for the licenses and copyrights
+##   8. Frame a response for each result, Aggregate the same and report (generate a JSON or so)
+##   9. Delete the OUTPUTS/ folder
+
+## @author tarun.murala
+
 import subprocess
 from collections import OrderedDict
 import re
 import os
 import json
+from xml.etree import ElementTree
 
 DIFF_TREE_RE = re.compile("^:(?P<src_mode>[0-9]{6}) (?P<dst_mode>[0-9]{6}) (?P<src_hash>[0-9a-f]{7,40}) (?P<dst_hash>[0-9a-f]{7,40}) (?P<status>[ADMTUX]|[CR][0-9]{1,3})\s+(?P<file1>\S+)(?:\s+(?P<file2>\S+))?$", re.MULTILINE)
 SCANCODE = '../scancode-toolkit-2.0.1/scancode'
 OUTPUT_DIR = 'outputs'
+
+# Response data
+response_data = {}
+response_data['scanned_files'] = []
+response_data['compressed_files'] = []
+response_data['packaging_files'] = []
+response_data['license_errors'] = []
 
 def run_git(args):
     args = ['git'] + args
@@ -62,19 +92,33 @@ def check_print_license_constraints(json_file, file_name):
 def check_for_licenses_new_file(commit_sha, file_name):
     print "Scanning NEW File -> " + file_name
     branch_name = get_branch_name(commit_sha, file_name)
-    #  # TODO: Check if the new file is zip extract the same
     output_file_path = generate_ref_file(branch_name, file_name)
+
+    if is_packaging_model(file_name):
+        return handle_packaging_file(file_name, 'ADD', output_file_path)
+    if is_compressed(file_name):
+        return handle_compressed_file(file_name, 'ADD')
+    
+    # Else Scan the file and check for licenses and copyrights
     output_file_json = get_json_name(output_file_path)
-    run_scancode(['--license', '--copyright', '--package', output_file_path, output_file_json])
+    # Ignoring package scan
+    run_scancode(['--license', '--copyright', output_file_path, output_file_json])
     check_print_license_constraints(output_file_json, file_name)
 
 def check_for_licenses_diff_from_file(commit_sha, file_name):
     print "Scanning MODIFIED File -> " + file_name
     branch_name = get_branch_name(commit_sha, file_name)
-    #  # Get only the diff and check against the same
     output_file_path = generate_ref_file(branch_name, file_name)
+
+    if is_packaging_model(file_name):
+        return handle_packaging_file(file_name, 'MODIFY', output_file_path)
+    if is_compressed(file_name):
+        return handle_compressed_file(file_name, 'MODIFY')
+
+    # Else Take the Diff of the files and scan for licenses and copyrights
     output_file_json = get_json_name(output_file_path)
-    run_scancode(['--license', '--copyright', '--package', output_file_path, output_file_json])
+    # Ignoring package scan
+    run_scancode(['--license', '--copyright', output_file_path, output_file_json])
     check_print_license_constraints(output_file_json, file_name)
 
 def git_config():
@@ -140,6 +184,7 @@ def scan_revisions(old, new, head_commit=False):
             item = i.groupdict()
             status = item['status']
             file_name = item['file1'];
+            add_to_scanned_files(file_name)
             if item['status'] == 'A':      
                 check_for_licenses_new_file(commit_sha, file_name)
             elif item['status'] == 'M':    
@@ -149,7 +194,114 @@ def scan_revisions(old, new, head_commit=False):
 
     return revisions
 
-# # MAIN CODE
+def add_to_scanned_files(file_name):
+    global response_data
+    response_data['scanned_files'].append(file_name)
+
+def add_to_compressed_files(file_name):
+    global response_data
+    response_data['compressed_files'].append(file_name)
+
+def add_to_packaging_files(file_name):
+    global response_data
+    response_data['packaging_files'].append(file_name)
+
+def add_to_license_errors(file_name, message):
+    global response_data
+    response_data['license_errors'].append(file_name)
+
+
+def is_packaging_model(file_name):
+    print "is_packaging_model file_name -> " + file_name
+    if not file_name:
+        return False
+
+    return is_pom(file_name) or is_npm(file_name) or 
+        is_rpm(file_name) or is_nuget(file_name) or 
+            is_php(file_name)
+
+def is_pom(file_name):
+    return file_name.endswith(('.pom', 'pom.xml'))
+
+def is_npm(file_name):
+    return file_name.endswith(('package.json', 'npm-shrinkwrap.json'))
+
+def is_rpm(file_name):
+    return file_name.endswith(('.rpm', '.srpm'))
+
+def is_nuget(file_name):
+    return file_name.endswith(('.nupkg'))
+
+def is_php(file_name):
+    return file_name.endswith(('composer.json'))
+
+def is_compressed(file_name):
+    return file_name.endswith(('.a ', '.ar', '.cpio', '.shar', '.LBR', 
+        '.iso', '.lbr', '.mar', '.sbx', '.tar', '.bz2', '.gz', '.lz', 
+        '.lzma', '.lzo', '.rz', '.sfark', '.sz', '.?Q?', '.?Z?', '.xz', 
+        '.z', '.Z', '.??_', '.7z', '.s7z', '.ace', '.afa', '.alz', '.apk', 
+        '.arc', '.arj', '.b1', '.ba', '.bh', '.cab', '.car', '.cfs', 
+        '.cpt', '.dar', '.dd', '.dgc', '.dmg', '.ear', '.gca', '.ha', 
+        '.hki', '.ice', '.jar', '.kgb', '.lzh ', '.lha', 
+        '.lzx', '.pak', '.partimg', '.paq6 ', '.paq7 ', '.pea', 
+        '.pim', '.pit', '.qda', '.rar', '.rk', '.sda', '.sea', 
+        '.sen', '.sfx', '.shk', '.sit', '.sitx', '.sqx', '.tar', 
+        '.gz ', '.tgz ', '.tar', '.Z ', '.tar', '.bz2', '.tbz2 ', 
+        '.tar', '.lzma ', '.tlz', '.uc ', '.uc0 ', '.uc2 ', 
+        '.ucn ', '.ur2 ', '.ue2', '.uca', '.uha', '.war', 
+        '.wim', '.xar', '.xp3', '.yz1', '.zip ', '.zipx', '.zoo', '.zpaq', '.zz'))    
+
+## JS Files will go through the scanning for licenses and copyrights
+
+
+def handle_packaging_file(file_name, revision_type, output_file_path):
+    add_to_packaging_files(file_name)
+    if not revision_type:
+        print "Invalid Revision Type"
+        return
+
+    if is_pom(file_name):
+        handle_pom_changes(file_name, revision_type, output_file_path)
+    elif is_npm(file_name):
+        handle_npm_changes(file_name, revision_type, output_file_path)
+    else:
+        handle_other_changes(file_name, revision_type, output_file_path)
+
+def handle_pom_changes(file_name, revision_type, output_file_path):
+    if revision_type == 'ADD':
+        print "New POM has been added"
+    
+    # Check for the dependencies
+    tree = ElementTree.parse(output_file_path)
+    root = tree.getroot()
+
+    deps = root.findall(".//xmlns:dependency", namespaces=namespaces)
+    for d in deps:
+        artifactId = d.find("xmlns:artifactId", namespaces=namespaces)
+        version    = d.find("xmlns:version", namespaces=namespaces)
+        # TODO: Do we manually install the depdency and scan for the changes?
+        # Ideally maintain list for whitelist with version
+        print artifactId.text + '\t' + version.text
+
+def handle_npm_changes(file_name, revision_type, output_file_path):
+    if revision_type == 'ADD':
+        print "New Package JSON has been added"
+    
+    with open(output_file_path) as json_file_temp:    
+        json_data = json.load(json_file_temp)
+        dependencies = json_data["dependencies"]
+        if dependencies and len(dependencies) > 0:
+            add_to_license_errors(file_name)
+
+def handle_other_changes(file_name, revision_type, output_file_path):
+    print "Verify manually! Other packaging model(s) have been added/updated -> " + file_name
+    add_to_license_errors(file_name)
+
+def handle_compressed_file(file_name, revision_type):
+    print "Compressed file has been added/updated -> " + file_name
+    add_to_license_errors(file_name)
+
+## MAIN CODE
 # if __name__ == "__main__":
 #     for line in sys.stdin:
 #         old, new, ref = line.strip().split(' ')
@@ -157,6 +309,9 @@ def scan_revisions(old, new, head_commit=False):
 #         revisions = scan_revisions(old, new, ref)
 #         print revisions
 
-# # TEST Code
-revisions = scan_revisions('5dcea23c7c266bac54d090bfafa55536ee31d486', '32c2abecf10557e02bb20912be1838908087f498')
+## TEST Code
+scan_revisions('5dcea23c7c266bac54d090bfafa55536ee31d486', '32c2abecf10557e02bb20912be1838908087f498')
 
+json_response = json.dumps(response_data)
+print response_data
+print json_response
