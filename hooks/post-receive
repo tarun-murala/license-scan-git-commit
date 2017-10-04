@@ -4,21 +4,20 @@
 ##   - A symlink has to created from the .hooks (incase if .coreHooks are not configured)
 ##   - Or use templates incase
 ## Logic:
-##   1. Read the Git commit
-##   2. Read the Last commit
-##   3. For each file revisions in the part of commit
-##   4. Retrieve the branch name on which this commit was made
-##   5. Fetch the file from the branch and Save it under OUTPUTS/ folder
-##   6. If the file has ADDED
+##   1. Read the Last Git commit
+##   2. For each file revisions in the part of commit
+##   3. Retrieve the branch name on which this commit was made
+##   4. Fetch the file from the branch and Save it under OUTPUTS/ folder
+##   5. If the file has ADDED
 ##         i. If the file is packaging file - check and report for the licenses
 ##         ii. If the file is compressed file - simply report
 ##         iii. If the file neither of them - Scan for the licenses and copyrights
-##   7. If the file has MODIFIED
+##   6. If the file has MODIFIED
 ##         i. If the file is packaging file - check and report for the licenses
 ##         ii. If the file is compressed file - simply report
 ##         iii. If the file neither of them - Scan for the licenses and copyrights
-##   8. Frame a response for each result, Aggregate the same and report (generate a JSON or so)
-##   9. Delete the OUTPUTS/ folder
+##   7. Frame a response for each result, Aggregate the same and report (generate a JSON or so)
+##   8. Delete the OUTPUTS/ folder
 
 ## @author tarun.murala
 
@@ -31,7 +30,7 @@ from xml.etree import ElementTree
 
 DIFF_TREE_RE = re.compile("^:(?P<src_mode>[0-9]{6}) (?P<dst_mode>[0-9]{6}) (?P<src_hash>[0-9a-f]{7,40}) (?P<dst_hash>[0-9a-f]{7,40}) (?P<status>[ADMTUX]|[CR][0-9]{1,3})\s+(?P<file1>\S+)(?:\s+(?P<file2>\S+))?$", re.MULTILINE)
 SCANCODE = '../scancode-toolkit-2.0.1/scancode'
-OUTPUT_DIR = '../outputs'
+OUTPUT_DIR = 'outputs'
 namespaces = {'xmlns' : 'http://maven.apache.org/POM/4.0.0'}
 
 # Response data
@@ -75,6 +74,7 @@ def get_json_name(file_name):
     return ".".join(file_name_parts[0:(len(file_name_parts)-1)]) + ".json"
 
 def check_print_license_constraints(json_file, file_name):
+    print "json_file -> " + json_file
     if not os.path.isfile(json_file):
         "Unable to find the output json -> " + json_file
         return
@@ -86,6 +86,7 @@ def check_print_license_constraints(json_file, file_name):
             if licenses: 
                 if len(licenses) > 0:
                     print file_name + " -> HAS License Constraints"
+                    add_to_license_errors(file_name, 'has_license_constraints')
                     return;
     print file_name + " -> has NO License Constraints"
 
@@ -285,6 +286,12 @@ def handle_pom_changes(file_name, revision_type, output_file_path):
             # Ideally maintain list for whitelist with version
             if not str(groupId).startswith(('com.glide', 'com.snc')):
                 add_to_license_errors(file_name, 'review_pom_file')
+    else:
+        print "New POM has been updated"
+        # Check if the version(s) are updated and add to license error(s)
+        add_to_license_errors(file_name, 'review_pom_file')
+
+
 
 def handle_npm_changes(file_name, revision_type, output_file_path):
     if revision_type == 'ADD':
@@ -309,8 +316,8 @@ def handle_compressed_file(file_name, revision_type):
 #     for line in sys.stdin:
 #         old, new, ref = line.strip().split(' ')
 #         print "old -> " + old + "| new -> " + new + " | ref -> " + ref
-#         revisions = scan_revisions(old, new, ref)
-#         print revisions
+#         scan_revisions(old, new, ref)
+#  
 
 ## TEST Code - After seeding the test files
 ## Run python hooks/post-receive
