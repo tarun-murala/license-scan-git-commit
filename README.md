@@ -6,6 +6,8 @@ This is prototype to validate the license compliance for the source code (mainta
 Post-Receive Hook
    - A symlink has to created from the .hooks (incase if .coreHooks are not configured)
    - Or use templates incase
+ 
+ 
  Logic:
    1. Read the Last Git commit
    2. For each file revisions in the part of commit
