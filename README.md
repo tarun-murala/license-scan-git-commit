@@ -1,6 +1,6 @@
-# server-side-hooks
-License Scan - Git Commit - Server Side Hooks
+# License Scan - Git Commit - Server Side Hooks
 
+Server Side Hooks
 This is prototype to validate the license compliance for the source code (maintained through git versioning systems)
 
 Post-Receive Hook
